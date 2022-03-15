@@ -30,7 +30,8 @@ def control(data):
 	global vel_input
 	global kp
 	global kd
-	global angle = 0.0
+	global angle
+	angle = 0.0
 
 	print("PID Control Node is Listening to error")
 	
@@ -53,10 +54,10 @@ def control(data):
 	command_pub.publish(command)
 
 if __name__ == '__main__':
-	global kp
-	global kd
-	global ki
-	global vel_input
+	# global kp
+	# global kd
+	# global ki
+	# global vel_input
 	kp = input("Enter Kp Value: ")
 	kd = input("Enter Kd Value: ")
 	ki = input("Enter Ki Value: ")
