@@ -29,18 +29,15 @@ def getRange(data,angle):
 	return 0.0
 
 
-
 def callback(data):
 	global forward_projection
 
 	theta = 70 # you need to try different values for theta
-	a = getRange(data,theta) # obtain the ray distance for theta
-	b = getRange(data,0)	# obtain the ray distance for 0 degrees (i.e. directly to the right of the car)
+	a = getRange(data, theta) # obtain the ray distance for theta
+	b = getRange(data, 0)	# obtain the ray distance for 0 degrees (i.e. directly to the right of the car)
 	swing = math.radians(theta)
 
-	## Your code goes here to determine the error as per the alrorithm 
-	# Compute Alpha, AB, and CD..and finally the error.
-	# TODO: implement
+	# Compute Alpha, AB, and CD.. and finally the error.
 
 	alpha = math.atan((a * math.cos(theta) - b)/(a * math.sin(theta)))
 	AB = b * math.cos(alpha)
@@ -58,7 +55,6 @@ def callback(data):
 
 if __name__ == '__main__':
 	print("Hokuyo LIDAR node started")
-	rospy.init_node('dist_finder',anonymous = True)
-	# TODO: Make sure you are subscribing to the correct car_x/scan topic on your racecar
-	rospy.Subscriber("/car_X/scan",LaserScan,callback)
+	rospy.init_node('dist_finder', anonymous=True)
+	rospy.Subscriber("/car_3/scan", LaserScan, callback)
 	rospy.spin()
