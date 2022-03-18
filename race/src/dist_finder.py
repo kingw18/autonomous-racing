@@ -28,7 +28,7 @@ def getRange(data, angle):
 	angle = math.radians(angle)
 
 	# Get index
-	angle_ind = round(angle / data.angle_increment)
+	angle_ind = int(round(angle / data.angle_increment))
 
 	distance = data.ranges[angle_ind]
 	if data.range_min <= distance <= data.range_max:
