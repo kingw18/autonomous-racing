@@ -17,30 +17,34 @@ car_length = 0.50 # Traxxas Rally is 20 inches or 0.5 meters
 pub = rospy.Publisher('error', pid_input, queue_size=10)
 
 
-def getRange(data,angle):
+def getRange(data, angle):
 	# data: single message from topic /scan
     # angle: between -30 to 210 degrees, where 0 degrees is directly to the right, and 90 degrees is directly in front
     # Outputs length in meters to object with angle in lidar scan field of view
     # Make sure to take care of NaNs etc.
-    #TODO: implement
 
+	# Convert angle to LIDAR's coordinates
+	angle += 30
+	angle = math.radians(angle)
 
+	# Get index
+	angle_ind = round(angle / data.angle_increment)
 
-	return 0.0
-
+	distance = data.ranges[angle_ind]
+	if data.range_min <= distance <= data.range_max:
+		return distance
+	return 100.0	# TODO: Better implementation of NaNs?
 
 
 def callback(data):
 	global forward_projection
 
 	theta = 70 # you need to try different values for theta
-	a = getRange(data,theta) # obtain the ray distance for theta
-	b = getRange(data,0)	# obtain the ray distance for 0 degrees (i.e. directly to the right of the car)
-	swing = math.radians(theta)
+	a = getRange(data, theta) # obtain the ray distance for theta
+	b = getRange(data, 0)	# obtain the ray distance for 0 degrees (i.e. directly to the right of the car)
+	theta = math.radians(theta)	# Convert to radians to make angle computations work
 
-	## Your code goes here to determine the error as per the alrorithm 
-	# Compute Alpha, AB, and CD..and finally the error.
-	# TODO: implement
+	# Compute Alpha, AB, and CD.. and finally the error.
 
 	alpha = math.atan((a * math.cos(theta) - b)/(a * math.sin(theta)))
 	AB = b * math.cos(alpha)
@@ -58,7 +62,6 @@ def callback(data):
 
 if __name__ == '__main__':
 	print("Hokuyo LIDAR node started")
-	rospy.init_node('dist_finder',anonymous = True)
-	# TODO: Make sure you are subscribing to the correct car_x/scan topic on your racecar
-	rospy.Subscriber("/car_X/scan",LaserScan,callback)
+	rospy.init_node('dist_finder', anonymous=True)
+	rospy.Subscriber("/car_3/scan", LaserScan, callback)
 	rospy.spin()
