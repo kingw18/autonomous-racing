@@ -10,6 +10,7 @@ kd = 0.0 #TODO
 ki = 0.0 #TODO
 servo_offset = 0.0	# zero correction offset in case servo is misaligned and has a bias in turning.
 prev_error = 0.0
+err_sum = 0
 
  
 # This code can input desired velocity from the user.
@@ -31,6 +32,8 @@ def control(data):
 	global kp
 	global kd
 	global angle
+	global scalar
+	global err_sum
 	angle = 0.0
 
 	print("PID Control Node is Listening to error")
@@ -39,7 +42,14 @@ def control(data):
 	#TODO: Use kp, ki & kd to implement a PID controller
 	
 	# 1. Scale the error
+	# err_scaled = data.pid_error*scalar
+	err_sum += data.pid_error
+
 	# 2. Apply the PID equation on error to compute steering
+	# thetad = kp*data.pid_error + kd*(prev_error - err_scaled)
+	# for derivative of error, need (current error - prev_error)/time between messages
+	angle = kp*data.pid_error + kd*(prev_error - data.pid_error) + ki*err_sum
+
 	
 	# An empty AckermannDrive message is created. You will populate the steering_angle and the speed fields.
 	command = AckermannDrive()
@@ -62,6 +72,7 @@ if __name__ == '__main__':
 	kd = input("Enter Kd Value: ")
 	ki = input("Enter Ki Value: ")
 	vel_input = input("Enter desired velocity: ")
+	scalar = input("Input error scalar")
 	rospy.init_node('pid_controller', anonymous=True)
 	rospy.Subscriber("error", pid_input, control)
 	rospy.spin()
