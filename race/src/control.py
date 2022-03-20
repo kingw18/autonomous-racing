@@ -24,7 +24,7 @@ vel_input = 0.0	#TODO
 
 # Publisher for moving the car. 
 # TODO: Use the coorect topic /car_x/offboard/command.
-command_pub = rospy.Publisher('/car_9/offboard/command', AckermannDrive, queue_size = 1)
+command_pub = rospy.Publisher('/car_3/offboard/command', AckermannDrive, queue_size = 1)
 
 def control(data):
 	global prev_error
@@ -61,10 +61,12 @@ def control(data):
 	command.steering_angle = angle
 
 	# Make sure the velocity is within bounds [0,100]
-	vel_input = vel_input if vel_input < 100 else 100
-	vel_input = vel_input if vel_input >= 0 else 0
+	
 
 	# TODO: implement dynamic velocity control (scale velocity down as error goes up, up as error goes down)
+	vel_input = vel_input/abs(data.pid_error) if abs(data.pid_error) > 0.5 else vel_input
+	vel_input = vel_input if vel_input < 100 else 100
+	vel_input = vel_input if vel_input >= 0 else 0
 	command.speed = vel_input
 
 	# Move the car autonomously
