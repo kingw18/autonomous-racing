@@ -37,18 +37,19 @@ def control(data):
 	angle = 0.0
 
 	print("PID Control Node is Listening to error")
+	error = data.pid_error
 	
 	## Your PID code goes here
 	#: Use kp, ki & kd to implement a PID controller
 	
 	# 1. Scale the error
 	# err_scaled = data.pid_error*scalar
-	err_sum += data.pid_error
+	err_sum += error
 
 	# 2. Apply the PID equation on error to compute steering
 	# thetad = kp*data.pid_error + kd*(prev_error - err_scaled)
 	# for derivative of error, need (current error - prev_error)/time between messages
-	angle = kp*data.pid_error + kd*(prev_error - data.pid_error) + ki*err_sum
+	angle = kp*error + kd*(prev_error - error) + ki*err_sum
 	
 
 	
@@ -56,17 +57,24 @@ def control(data):
 	command = AckermannDrive()
 
 	# Make sure the steering value is within bounds [-100,100]
-	angle = angle if angle < 100 else 100
-	angle = angle if angle > -100 else -100
+	if angle<-100:
+		angle = -100
+	if angle>100:
+		angle = 100
 	command.steering_angle = angle
 
 	# Make sure the velocity is within bounds [0,100]
 	
 
 	# TODO: implement dynamic velocity control (scale velocity down as error goes up, up as error goes down)
-	vel_input = vel_input/abs(data.pid_error) if abs(data.pid_error) > 0.5 else vel_input
-	vel_input = vel_input if vel_input < 100 else 100
-	vel_input = vel_input if vel_input >= 0 else 0
+	
+	# vel_input = vel_input*2/abs(data.pid_error) if abs(data.pid_error) > 2 else vel_input
+	if abs(error) > 2:
+		vel_input = vel_input*2/math.sqrt(abs(error))
+	if vel_input < 10:
+		vel_input = 10
+	if vel_input>60:
+		vel_input = 60
 	command.speed = vel_input
 
 	# Move the car autonomously
