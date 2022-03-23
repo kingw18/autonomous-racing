@@ -35,48 +35,48 @@ def control(data):
 	global scalar
 	global err_sum
 	angle = 0.0
-
 	print("PID Control Node is Listening to error")
-	error = data.pid_error
 	
 	## Your PID code goes here
-	#: Use kp, ki & kd to implement a PID controller
+	#TODO: Use kp, ki & kd to implement a PID controller
 	
 	# 1. Scale the error
 	# err_scaled = data.pid_error*scalar
-	err_sum += error
-
+	err_sum += data.pid_error
+	error = data.pid_error
+	# print("Error:", error)
 	# 2. Apply the PID equation on error to compute steering
 	# thetad = kp*data.pid_error + kd*(prev_error - err_scaled)
 	# for derivative of error, need (current error - prev_error)/time between messages
-	angle = kp*error + kd*(prev_error - error) + ki*err_sum
+	error_diff = prev_error - error
+	angle = kp*data.pid_error + kd*(error_diff) + ki*err_sum
 	
-
-	
+	# print("Error difference:", error_diff)
+	# print("Angle:", angle)
 	# An empty AckermannDrive message is created. You will populate the steering_angle and the speed fields.
 	command = AckermannDrive()
 
-	# Make sure the steering value is within bounds [-100,100]
-	if angle<-100:
-		angle = -100
-	if angle>100:
-		angle = 100
+	# TODO: Make sure the steering value is within bounds [-100,100]
+	angle = angle if angle < 100 else 100
+	angle = angle if angle > -100 else -100
 	command.steering_angle = angle
-
-	# Make sure the velocity is within bounds [0,100]
 	
-
-	# TODO: implement dynamic velocity control (scale velocity down as error goes up, up as error goes down)
 	
-	# vel_input = vel_input*2/abs(data.pid_error) if abs(data.pid_error) > 2 else vel_input
-	if abs(error) > 2:
-		vel_input = vel_input*2/math.sqrt(abs(error))
-	if vel_input < 10:
-		vel_input = 10
-	if vel_input>60:
-		vel_input = 60
-	command.speed = vel_input
-
+	if abs(error) > 1.96:
+		set_speed = vel_input*1.4/math.sqrt(abs(error))
+		# print("Scaled speed to:", set_speed)
+	else:
+		set_speed = vel_input
+	if set_speed < 15:
+		set_speed = 15
+	if set_speed > 60:
+		set_speed = 60
+	command.speed = set_speed
+	
+	prev_error=error
+	# print("Error:", data.pid_error)
+	# print("Angle:", angle)
+	# print("Speed:", set_speed)
 	# Move the car autonomously
 	command_pub.publish(command)
 
@@ -89,7 +89,6 @@ if __name__ == '__main__':
 	kd = input("Enter Kd Value: ")
 	ki = input("Enter Ki Value: ")
 	vel_input = input("Enter desired velocity: ")
-	scalar = input("Input error scalar")
 	rospy.init_node('pid_controller', anonymous=True)
 	rospy.Subscriber("error", pid_input, control)
 	rospy.spin()
