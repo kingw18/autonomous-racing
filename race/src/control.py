@@ -11,7 +11,8 @@ ki = 0.0 #TODO
 servo_offset = 0.0	# zero correction offset in case servo is misaligned and has a bias in turning.
 prev_error = 0.0
 err_sum = 0
-
+err_queue = [] 
+err_queue_size = 20
  
 # This code can input desired velocity from the user.
 # velocity must be between [0,100] to move forward. 
@@ -35,6 +36,8 @@ def control(data):
 	global scalar
 	global err_sum
 	angle = 0.0
+	global err_queue
+	global err_queue_size
 	print("PID Control Node is Listening to error")
 	
 	## Your PID code goes here
@@ -42,7 +45,13 @@ def control(data):
 	
 	# 1. Scale the error
 	# err_scaled = data.pid_error*scalar
+	
+	if len(err_queue) >= err_queue_size:
+		err_sum -= err_queue.pop()
+	
 	err_sum += data.pid_error
+	err_queue.insert(0, data.pid_error)
+	# err_sum += data.pid_error
 	error = data.pid_error
 	# print("Error:", error)
 	# 2. Apply the PID equation on error to compute steering
