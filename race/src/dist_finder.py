@@ -71,7 +71,7 @@ def ftg_target_angle(data):
 	closest_point_ind = -1
 	for i in range(len(data.ranges)):
 		dist = data.ranges[i]
-		if data.range_min <= dist <= data.range_max:
+		if not data.range_min <= dist <= data.range_max:
 			ranges.append(data.range_max + 1) # Use as a substitute for infinity, actual value shouldn't matter as long as its greater than max
 		else:
 			if dist < closest_point:
