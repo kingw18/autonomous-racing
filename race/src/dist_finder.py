@@ -12,7 +12,7 @@ desired_distance = 0.9	# distance from the wall (in m). (defaults to right wall)
 vel = 15 		# this vel variable is not really used here.
 error = 0.0		# initialize the error
 car_length = 0.50 # Traxxas Rally is 20 inches or 0.5 meters
-car_width = 0.50  # TODO: How wide is the car??
+car_width = 0.3	# Car is about 30cm wide
 prev_distance = 0
 forward_angle = 90	# Angle representing the direction the car is currently facing
 min_threshold = 0.05
@@ -130,12 +130,13 @@ def ftg_target_angle(data):
 		if in_disparity:
 			if dist_between_measurements(ranges[disparity_ind], ranges[disparity_ind], angle_increment * (i - disparity_ind)) <= car_width:
 				if ranges[i] > ranges[disparity_ind]:
-					ranges[i] = disparity_ind
+					ranges[i] = ranges[disparity_ind]
 			else:
 				in_disparity = False
-		elif ranges[i] > last_measurement + disparity_threshold:
+		elif ranges[i] > last_measurement + disparity_threshold and not in_disparity:
 			in_disparity = True
-			disparity_ind = i
+			disparity_ind = i - 1
+			ranges[i] = ranges[i - 1]
 		last_measurement = ranges[i]
 
 	# Find Max Gap
