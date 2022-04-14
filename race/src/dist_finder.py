@@ -185,8 +185,8 @@ def ftg_target_angle(data):
 	
 	print('Min: ' + str(max_gap[0]/angle_increment - 30) + ' Max: ' + str(max_gap[1]/angle_increment - 30))
 	print(str(-30 + max_ind/angle_increment) + ' degrees')
-	# return -30 + (max_ind/angle_increment)
-	return ((max_gap[0] + max_gap[1])/2)/angle_increment - 30
+	return -30 + (max_ind/angle_increment)
+	# return ((max_gap[0] + max_gap[1])/2)/angle_increment - 30
 	# print(data.angle_increment)
 	# print(-30 + ((max_gap[0] + max_gap[1])/2)*angle_increment)	
 	# return -30 + ((max_gap[0] + max_gap[1])/2)*data.angle_increment
