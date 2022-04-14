@@ -20,6 +20,7 @@ min_threshold = 0.05
 gap_threshold = 0.1	# Threshold distance for defining gap
 bubble_rad = 100	# The radius (in angle increments) of the safety bubble (naive implementation)
 depth_threshold=3
+disparity_threshold=0.5	# The difference required to create a disparity
 
 # Handle to the publisher that will publish on the error topic, messages of the type 'pid_input'
 pub = rospy.Publisher('error', pid_input, queue_size=10)
@@ -121,7 +122,21 @@ def ftg_target_angle(data):
 		ranges[ind] = 0
 		ind -= 1
 
-	# TODO: Disparity Extender
+	# Disparity Extender
+	last_measurement = ranges[0]
+	disparity_ind = 0
+	in_disparity = False
+	for i in range(1, len(ranges)):
+		if in_disparity:
+			if dist_between_measurements(ranges[disparity_ind], ranges[disparity_ind], angle_increment * (i - disparity_ind)) <= car_width:
+				if ranges[i] > ranges[disparity_ind]:
+					ranges[i] = disparity_ind
+			else:
+				in_disparity = False
+		elif ranges[i] > last_measurement + disparity_threshold:
+			in_disparity = True
+			disparity_ind = i
+		last_measurement = ranges[i]
 
 	# Find Max Gap
 	max_gap = (0, 0)
