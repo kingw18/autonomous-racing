@@ -32,19 +32,6 @@ def getRange(data, angle):
     # Outputs length in meters to object with angle in lidar scan field of view
     # Make sure to take care of NaNs etc.
 	global prev_distance
-	'''
-	# Convert angle to LIDAR's coordinates
-	angle += 30
-	angle = math.radians(angle)
-
-	# Get index
-	angle_ind = int(round(angle / data.angle_increment))
-
-	distance = data.ranges[angle_ind]
-	if data.range_min <= distance <= data.range_max:
-		return distance
-	return 100.0	# TODO: Better implementation of NaNs?
-	'''
 	distance = data.ranges[int((angle+30)*len(data.ranges)/240)]
 	if data.range_min <= distance <= data.range_max:
 		prev_distance=distance	
@@ -67,15 +54,20 @@ def ftg_target_angle(data):
 	Returns the target goal determine by Follow-The-Gap in degrees
 	"""
 	global gap_threshold
-	angle_increment = len(data.ranges) / angle_range
-
-	# Copy the distance into a list that can be manipulated in order to preserve the original data
 	ranges = []
 	closest_point = data.range_max + 1
 	closest_point_ind = -1
-	for i in range(len(data.ranges)):
+	angle_increment = len(data.ranges) / angle_range
+	fov_width = 180
+	fov_angle_index = int(angle_increment*(240-fov_width)/2)
+	
+	"""
+	STEP 1 & 2
+	Step 1: Preprocess the laser scans and set the FOV
+	Step 2: Find the closest point
+	"""
+	for i in range(fov_angle_index, len(data.ranges) - fov_angle_index):
 		dist = data.ranges[i]
-    
 		if dist < closest_point and dist >= min_threshold:
 			closest_point = dist
 			closest_point_ind = i
@@ -92,51 +84,20 @@ def ftg_target_angle(data):
 					
 		else:
 			ranges.append(dist)
-
+	
 	for i in range(len(ranges)):
 		if ranges[i] < min_threshold or ranges[i] > data.range_max:
 			ranges[i] = data.range_max + 2
-	'''
-	ranges = []
-	closest_point = data.range_max + 1
-	closest_point_ind = -1
-	for i in range(len(data.ranges)):
-		dist = data.ranges[i]
-		
-		
-		if dist < closest_point and dist >= min_threshold:
-			closest_point = dist
-			closest_point_ind = i
-			ranges.append(dist)
-		
-		elif dist > data.range_max:
-			ranges.append(data.range_max + 1)
-		
-		elif dist <= min_threshold:
-			# global prev_distance
-			# data.ranges[i] = prev_distance # this is sus so we might need to replace this
-			ranges.append(data.range_max + 1)
-		else:
-			ranges.append(dist)
-	'''
 	
-	# Create Safety Bubble - Naive Implementation
 	"""
-	This just creates the bubble around a certain number of measurements on either side of the closest point.
-	I remember Prof. Behl saying in lecture that a more proper implementation would actually compute distances
-	to make the radius of the bubble equal to the width of the car. I tried to implement that below
+	STEP 3
+	Disparity extender and safety bubble
 	"""
-	'''
-	# print('Closest point dist: ' + str(closest_point) + ' at ' + str(closest_point_ind/angle_increment - 30) + ' degrees.')
-	for i in range(max(0, closest_point_ind - bubble_rad), min(len(data.ranges), closest_point_ind + bubble_rad)):
-		ranges[i] = 0
-	'''
-	
+	# CCW
 	last_measurement = ranges[0]
 	disparity_ind = 0
 	in_disparity = False
 	for i in range(1, len(ranges)):
-
 		if in_disparity:
 			if dist_between_measurements(ranges[disparity_ind], ranges[disparity_ind], (i-disparity_ind)/angle_increment) <= car_width:
 				if ranges[i] > ranges[disparity_ind]:
@@ -144,134 +105,57 @@ def ftg_target_angle(data):
 				else:
 					in_disparity = False
 
-			elif ranges[i] > last_measurement + disparity_threshold and not in_disparity:
-				in_disparity = True
-				disparity_ind = i-1
-				ranges[i] = ranges[i - 1]
-			last_measurement = ranges[i]
+		elif ranges[i] > last_measurement + disparity_threshold and not in_disparity:
+			in_disparity = True
+			disparity_ind = i-1
+			ranges[i] = ranges[i - 1]
+		last_measurement = ranges[i]
+	# CLOCKWISE
+	last_measurement = ranges[len(ranges)-1]
+	disparity_ind = len(ranges) - 1
+	in_disparity = False
+	for i in reversed(range(0, len(ranges)-1)):
+		if in_disparity:
+			if dist_between_measurements(ranges[disparity_ind], ranges[disparity_ind], (disparity_ind-i)/angle_increment) <= car_width:
+				if ranges[i] > ranges[disparity_ind]:
+					ranges[i] = ranges[disparity_ind]			
+				else:
+					in_disparity = False
 
-	# Create Safety Bubble - Full Implementation
-	"""
-	I think this is the proper implementation but it seems computationally very expensive
-	"""
+		elif ranges[i] > last_measurement + disparity_threshold and not in_disparity:
+			in_disparity = True
+			disparity_ind = i + 1
+			ranges[i] = ranges[i + 1]
+		last_measurement = ranges[i]
+	
+	left_zero_ind = len(ranges)
+	right_zero_ind = 0
 	ind = closest_point_ind + 1
 	while ind < len(ranges) and dist_between_measurements(closest_point, ranges[ind], angle_increment * (ind - closest_point_ind)) <= car_width:
 		ranges[ind] = 0
+		left_zero_ind = ind
 		ind += 1
 	ind = closest_point_ind - 1
 	while ind >= 0 and dist_between_measurements(closest_point, ranges[ind], angle_increment * (closest_point_ind - ind)) <= car_width:
 		ranges[ind] = 0
+		right_zero_ind = ind
 		ind -= 1
-		
-	print('Closest point:' + str(closest_point) + ' at ' + str(closest_point_ind/angle_increment - 30) + ' degrees')
-	'''		
-	# Disparity Extender
-	last_measurement = ranges[0]
-	disparity_ind = 0
-	in_disparity = False
-	for i in range(1, len(ranges)):
-		if in_disparity:
-			if dist_between_measurements(ranges[disparity_ind], ranges[disparity_ind], (i - disparity_ind)/angle_increment) <= car_width:
-				if ranges[i] > ranges[disparity_ind]:
-					ranges[i] = ranges[disparity_ind]
-			else:
-				in_disparity = False
-		elif ranges[i] > last_measurement + disparity_threshold and not in_disparity:
-			in_disparity = True
-			disparity_ind = i - 1
-			ranges[i] = ranges[i - 1]
-		last_measurement = ranges[i]
-	'''
-	'''
-	# Find Max Gap
-	max_gap = (0, 0)
-	gap_start = 0
-	current_deepest_in_gap = 0
-	in_gap = False
-	for i in range(len(ranges)):
-		if in_gap and ranges[i] <= gap_threshold:	# Should we compare directly to 0 or within a certain threshold?
-			if i - gap_start > max_gap[1] - max_gap[0]:
-				max_gap = (gap_start, i)
-				# if current_deepest_in_gap > depth_threshold  and dist_between_measurements(ranges[max_gap[0]], ranges[max_gap[1]], (max_gap[1]-max_gap[0])/angle_increment) > 2 * car_width:
-					# print( ((max_gap[0] + max_gap[1])/2)/angle_increment - 30)
-					# print(max_gap[0], max_gap[1])
-	#				return ((max_gap[0] + max_gap[1])/2)/angle_increment - 30
-			in_gap = False
-		
-	#		if current_deepest_in_gap > depth_threshold:
-	#			max_gap = (gap_start, i)
-	#			break
-			current_deepest_in_gap = 0
-		elif not in_gap and ranges[i] > 0:
-			gap_start = i
-			in_gap = True
-			
-	#	else:
-	#		current_deepest_in_gap = max(current_deepest_in_gap, ranges[i])
-			
-	#	if in_gap:
-	#		current_deepest_in_gap = max(current_deepest_in_gap, ranges[i])
-			
+	ranges[closest_point_ind] = 0
+	"""
+	STEP 4
+	Find the widest gap
+	"""
+	if len(ranges) - 1 - left_zero_ind > right_zero_ind:
+		max_gap = (left_zero_ind, len(ranges) - 1)
+	else:
+		max_gap = (0, right_zero_ind)
+	
+	print('Closest point:' + str(closest_point) + ' at ' + str((closest_point_ind+fov_angle_index)/angle_increment - 30) + ' degrees')
 
-	if in_gap and len(ranges) - gap_start > max_gap[1] - max_gap[0]:
-		max_gap = (gap_start, len(ranges))
-		
-	# print(max_gap[0], max_gap[1])
-	# max_gap[1]-=1
-	# Find target angle - Naive Implementation (Find deepest point)
-	max_ind = -1
-	deepest_dist = 0
-	for i in range(max_gap[0], max_gap[1]):
-		if ranges[i] > deepest_dist:
-			deepest_dist = ranges[i]
-			max_ind = i
-	
-	
 	print('Min: ' + str(max_gap[0]/angle_increment - 30) + ' Max: ' + str(max_gap[1]/angle_increment - 30))
-	print(str(-30 + max_ind/angle_increment) + ' degrees')
-	return -30 + (max_ind/angle_increment)
+	return -30 + (240-fov_width)/2 + (max_gap[0] + max_gap[1])/(2*angle_increment)
 
-
-	# return ((max_gap[0] + max_gap[1])/2)/angle_increment - 30
-	# print(data.angle_increment)
-	# print(-30 + ((max_gap[0] + max_gap[1])/2)*angle_increment)	
-	# return -30 + ((max_gap[0] + max_gap[1])/2)*data.angle_increment
-	'''
-	max_gap = (0, 0)
-	gap_start = 0
-	current_deepest_in_gap = 0
-	current_deepest_in_gap_ind = 0
-	in_gap = False
-	for i in range(len(ranges)):
-		if in_gap and ranges[i] <= data.range_min:	# Use range min # Should we compare directly to 0 or within a certain threshold?
-			if i - gap_start > max_gap[1] - max_gap[0]:
-				max_gap = (gap_start, i)
-
-			in_gap = False
-			if current_deepest_in_gap > depth_threshold and dist_between_measurements(ranges[max_gap[0]], ranges[max_gap[1]], (max_gap[1]-max_gap[0])/angle_increment) > car_width:
-				print('[ ' + str(max_gap[0]/angle_increment - 30) + ', ' + str(max_gap[1]/angle_increment - 30) + ']')
-				print('Going ' + str(current_deepest_in_gap_ind/angle_increment - 30) + ' degrees')
-				# print(ranges[max_gap[0]: max_gap[1]])
-				return -30 + (current_deepest_in_gap_ind/angle_increment)
-
-			current_deepest_in_gap = 0
-			current_deepest_in_gap_ind = i
-		elif not in_gap and ranges[i] > data.range_min:
-			gap_start = i
-			in_gap = True
-			
-		if in_gap:
-			if ranges[i] > current_deepest_in_gap and ranges[i] <= data.range_max:
-				current_deepest_in_gap = max(current_deepest_in_gap, ranges[i])
-				current_deepest_in_gap_ind = i
-
-
-	#if in_gap and len(ranges) - gap_start > max_gap[1] - max_gap[0]:
-	max_gap = (gap_start, len(ranges))
-	print('[' + str(max_gap[0]/angle_increment - 30) + ', ' + str(max_gap[1]/angle_increment - 30) + ']')
-	print('Going ' + str(current_deepest_in_gap_ind/angle_increment - 30) + ' degrees')
-	return -30 + (current_deepest_in_gap_ind/angle_increment)
-
+		
 
 def callback(data):
 	global forward_projection
