@@ -66,115 +66,111 @@ def ftg_target_angle(data):
 	Step 1: Preprocess the laser scans and set the FOV
 	Step 2: Find the closest point
 	"""
-	for i in range(fov_angle_index, len(data.ranges) - fov_angle_index):
-		dist = data.ranges[i]
-		angle_from_fwd = abs(len(data.ranges)/2 - i)/angle_increment
-		if dist < closest_point and dist >= min_threshold and angle_from_fwd <= obst_theta:
-			closest_point = dist
-			closest_point_ind = i - fov_angle_index
-			ranges.append(dist)
-		
-		elif dist > data.range_max or dist <= min_threshold:
-			if i != 0 and i != len(data.ranges) - 1:
-				ranges.append((data.ranges[i-1] + data.ranges[i+1])/2)
-			else:
-				if i == 0:
-					ranges.append(data.ranges[i+1])
-				else:
-					ranges.append(data.ranges[i-1])
-					
-		else:
-			ranges.append(dist)
-	
-	for i in range(len(ranges)):
-		if ranges[i] < min_threshold or ranges[i] > data.range_max:
-			ranges[i] = data.range_max + 2
-	
-	"""
-	STEP 3
-	Disparity extender and safety bubble
-	"""
-	# CCW
 	last_measurement = ranges[0]
 	disparity_ind = 0
 	in_disparity = False
 	for i in range(1, len(ranges)):
-		if in_disparity:
-			if dist_between_measurements(ranges[disparity_ind], ranges[disparity_ind], (i-disparity_ind)/angle_increment) <= 2.5 * car_width:
-				if ranges[i] > ranges[disparity_ind]:
-					ranges[i] = ranges[disparity_ind]			
-				else:
-					in_disparity = False
+	    if in_disparity:
+		if dist_between_measurements(ranges[disparity_ind], ranges[disparity_ind], (i-disparity_ind)/angle_increment) <= 0.5 * car_width:
+		    print("Dist between the measurements:", disparity_ind, "and", i, ":", dist_between_measurements(ranges[disparity_ind], ranges[disparity_ind], (i-disparity_ind)/angle_increment))
+		    print("Angle:", (i-disparity_ind)/angle_increment)
+		    if ranges[i] > ranges[disparity_ind]:
+			ranges[i] = ranges[disparity_ind]			
+		    else:
+			in_disparity = False
+			print("leaving disparity")
 
-		elif ranges[i] > last_measurement + disparity_threshold and not in_disparity:
-			in_disparity = True
-			disparity_ind = i-1
-			ranges[i] = ranges[i - 1]
-		last_measurement = ranges[i]
+	    elif ranges[i] > last_measurement + disparity_threshold and not in_disparity:
+		in_disparity = True
+		print("Found disparity at", i)
+		disparity_ind = i-1
+		ranges[i] = ranges[i - 1]
+	    last_measurement = ranges[i]
 	# CLOCKWISE
 	last_measurement = ranges[len(ranges)-1]
 	disparity_ind = len(ranges) - 1
 	in_disparity = False
 	for i in reversed(range(0, len(ranges)-1)):
-		if in_disparity:
-			if dist_between_measurements(ranges[disparity_ind], ranges[disparity_ind], (disparity_ind-i)/angle_increment) <= 2.5 * car_width:
-				if ranges[i] > ranges[disparity_ind]:
-					ranges[i] = ranges[disparity_ind]			
-				else:
-					in_disparity = False
+	    if in_disparity:
+		if dist_between_measurements(ranges[disparity_ind], ranges[disparity_ind], (disparity_ind-i)/angle_increment) <= 0.5 * car_width:
+		    if ranges[i] > ranges[disparity_ind]:
+			ranges[i] = ranges[disparity_ind]			
+		    else:
+			in_disparity = False
 
-		elif ranges[i] > last_measurement + disparity_threshold and not in_disparity:
-			in_disparity = True
-			disparity_ind = i + 1
-			ranges[i] = ranges[i + 1]
-		last_measurement = ranges[i]
+	    elif ranges[i] > last_measurement + disparity_threshold and not in_disparity:
+		in_disparity = True
+		disparity_ind = i + 1
+		ranges[i] = ranges[i + 1]
+	    last_measurement = ranges[i]
+	gap_max_depths = []
+	gap_min_depths = []
+	edges = []
+	gaps = []
+	# Find edges
+	# print(ranges)
+	edges.append(0)
+	for i in range(len(ranges)-2):
+	    if abs(ranges[i] - ranges[i+1]) > 0.25:
+		edges.append(i+1)
+		print("found an edge at", i)
+	edges.append(len(ranges)-1)
+	# Define gaps
+	for i in range(len(edges) - 1):
+	    gaps.append((edges[i], edges[i+1]-1))
+
+	# Find how deep the gaps are
+	for i in range(len(gaps)):
+	    max_in_gap = 0
+	    min_in_gap = 8
+	    for j in range(gaps[i][0], gaps[i][1]):
+		if ranges[j] > max_in_gap:
+		    max_in_gap = ranges[j]
+		    max_index = j
+		if ranges[j] < min_in_gap:
+		    min_in_gap = ranges[j]
+
+	    gap_max_depths.append(max_in_gap)
+	    gap_min_depths.append(min_in_gap)
+
+	gap_metric = []
+	print("gaps before metric", gaps)
+	for i in range(len(gaps)):
+	    gap_dists = ranges[gaps[i][0]:gaps[i][1]+1]
+	    gap_width_incs = gaps[i][1]- gaps[i][0]
+	    # print("Gap dists:", gap_dists, "range:", gaps[i][0], "to", gaps[i][1]+1)
+
+	    first = gap_dists[0]
+	    second = gap_dists[-1]
+	    gap_width = dist_between_measurements(gap_dists[0], gap_dists[-1], gap_width_incs/(len(ranges)/150))
+	    if gap_width_incs:
+		gap_avg_dist = sum(gap_dists)/(gap_width_incs)
+	    else: 
+		gap_avg_dist = sum(gap_dists)
+	    gap_metric.append(gap_avg_dist*(max(gap_dists)**0.5)*gap_width)
+	    if gap_width < car_width:
+		gap_metric[i] = 0
+
+	max_metric = 0
+	best_gap = 0
+	for i in range(len(gap_metric)):
+	    if gap_metric[i] > max_metric:
+		max_metric = gap_metric[i]
+		best_gap = i
+
+	far_ind = 0
+	far_dist = 0
+	for i in range(gaps[best_gap][0],gaps[best_gap][1]):
+	    if ranges[i] > far_dist:
+		far_dist = ranges[i]
+		far_ind = i
+	print(gaps)
+	print("Best gap is gap #", best_gap)
+	print("Best gap:", gaps[best_gap])
+	print("Target angle:", 15 + far_ind/(len(ranges)/150))
+	print("Target index:", far_ind)
 	
-	left_zero_ind = len(ranges)
-	right_zero_ind = 0
-	ind = closest_point_ind + 1
-	while ind < len(ranges) and dist_between_measurements(closest_point, ranges[ind], angle_increment * (ind - closest_point_ind)) <= 3*car_width:
-		ranges[ind] = 0
-		left_zero_ind = ind
-		ind += 1
-	ind = closest_point_ind - 1
-	# print('First ind going right', ind)
-	while ind >= 1 and dist_between_measurements(closest_point, ranges[ind], angle_increment * (closest_point_ind - ind)) <= 3*car_width:
-		ranges[ind] = 0
-		right_zero_ind = ind
-		ind -= 1
-	#	print("ind in right while:", ind)
-	ranges[closest_point_ind] = 0
-	"""
-	STEP 4
-	Find the widest gap
-	"""
-	if right_zero_ind <= 1:
-		max_gap = (left_zero_ind, len(ranges) - 1)
-	elif left_zero_ind > len(ranges)-3:
-		max_gap = (0, right_zero_ind, ind)
-	elif max(ranges[:right_zero_ind]) > depth_threshold and max(ranges[left_zero_ind:]) < depth_threshold:
-		max_gap = (0, right_zero_ind)
-	elif max(ranges[:right_zero_ind]) < depth_threshold and max(ranges[left_zero_ind:]) > depth_threshold:
-		max_gap = (left_zero_ind, len(ranges) - 1)
-	elif len(ranges) - 1 - left_zero_ind > right_zero_ind:
-		max_gap = (left_zero_ind, len(ranges) - 1)
-	else:
-		max_gap = (0, right_zero_ind)
-	
-	deepest_dist = 0
-	deepest_dist_ind = 0
-	for i in range(max_gap[0], max_gap[1]):
-		if ranges[i] > deepest_dist:
-			deepest_dist_ind = i
-			deepest_dist = ranges[i]
-	print('Closest point:' + str(closest_point) + ' at ' + str((closest_point_ind+fov_angle_index)/angle_increment - 30) + ' degrees')
-	print('Min index:' ,max_gap[0],'Max index:', max_gap[1])
-	print('Min: ' + str((max_gap[0]+fov_angle_index)/angle_increment - 30) + ' Max: ' + str((max_gap[1]+fov_angle_index)/angle_increment - 30))
-	# target = -30 + (240-fov_width)/2 + (max_gap[0] + max_gap[1])/(2*angle_increment)
-	target = (-30 + (240-fov_width)/2 + (deepest_dist_ind/angle_increment))
-	print('Target:', target)
-	# print('Range:', len(ranges))
-	print('Left index:',left_zero_ind, 'Right index:', right_zero_ind)
+	target = 15 + far_ind/(len(ranges)/150)
 	return target
 		
 
