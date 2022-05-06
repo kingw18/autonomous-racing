@@ -20,7 +20,9 @@ min_threshold = 0.05
 gap_threshold = 0.1	# Threshold distance for defining gap
 bubble_rad = 100	# The radius (in angle increments) of the safety bubble (naive implementation)
 depth_threshold=2
-disparity_threshold=0.5	# The difference required to create a disparity
+disparity_threshold=0.4	# The difference required to create a disparity
+angle_increment = 0
+fov = 150
 
 # Handle to the publisher that will publish on the error topic, messages of the type 'pid_input'
 pub = rospy.Publisher('error', pid_input, queue_size=10)
@@ -60,6 +62,9 @@ def dist_between_measurements(dist1, dist2, angle):
 	dist_squared = (dist1 ** 2) + (dist2 ** 2) - (2 * dist1 * dist2 * math.cos(math.radians(angle)))	# Law of Cosines
 	return dist_squared ** 0.5
 
+# Get the angle between 2 indices in ranges
+def angle_between_indices(lower, higher):
+    return abs(higher - lower)/angle_increment
 
 def ftg_target_angle(data):
 	
@@ -67,35 +72,121 @@ def ftg_target_angle(data):
 	Returns the target goal determine by Follow-The-Gap in degrees
 	"""
 	global gap_threshold
+	global angle_increment
 	angle_increment = len(data.ranges) / angle_range
 
 	# Copy the distance into a list that can be manipulated in order to preserve the original data
-	ranges = []
+	ranges = data.ranges.copy()
+
 	closest_point = data.range_max + 1
 	closest_point_ind = -1
 	for i in range(len(data.ranges)):
 		dist = data.ranges[i]
-    
-		if dist < closest_point and dist >= min_threshold:
+		if dist < closest_point:
 			closest_point = dist
 			closest_point_ind = i
-			ranges.append(dist)
-		
-		elif dist > data.range_max or dist <= min_threshold:
-			if i != 0 and i != len(data.ranges) - 1:
-				ranges.append((data.ranges[i-1] + data.ranges[i+1])/2)
-			else:
-				if i == 0:
-					ranges.append(data.ranges[i+1])
-				else:
-					ranges.append(data.ranges[i-1])
-					
-		else:
-			ranges.append(dist)
+		ranges.append(dist)
 
-	for i in range(len(ranges)):
-		if ranges[i] < min_threshold or ranges[i] > data.range_max:
-			ranges[i] = data.range_max + 2
+	def set_safety_bubble(index):
+		# print(ranges, index)
+		lo = index - 1
+		hi = index + 1
+		
+		while lo >= 0 and dist_between_measurements(ranges[index], ranges[index], angle_between_indices(lo, index)) <= .5 * car_width and ranges[lo] >= ranges[index] :
+			# print(ranges[lo] >= ranges[index])
+			# print(dist_between_measurements(ranges[index], ranges[index], angle_between_indices(lo, index)))
+			# ranges[lo] = 0
+			lo -= 1
+
+		while hi < len(ranges) and dist_between_measurements(ranges[index], ranges[index], angle_between_indices(index, hi)) <= .5 * car_width and ranges[hi] >= ranges[index] :
+			# print(index, hi, angle_increment)
+			# dist_between_measurements(ranges[index], ranges[index], angle_between_indices(index, hi))
+			# print('hi', hi)
+			# ranges[hi] = 0
+			hi += 1
+
+		# ranges[index] = 0
+		# Return the range to set to 0s (I can explain why we don't directly set them to 0)
+		print('Lo, hi', lo, hi)
+		return (lo, hi)
+
+	# Holds all ranges that I should set to zero (safety bubbles)
+	set_to_zero = []
+	set_to_zero.append(set_safety_bubble(closest_point_ind))
+
+	# Set a safety bubble around all disparities
+	# DISCLAIMER: This isn't the most efficient but it should be fast enough and is more readable
+	# Worst case: everything will be set to 0 at most twice so this isn't an O(n^2) algorithm I think
+	for i in range(0, len(ranges) - 1):
+		if ranges[i+1] - ranges[i] > disparity_threshold:
+			# There is a disparity at index i
+			set_to_zero.append(set_safety_bubble(i))
+    
+	for i in reversed(range(1, len(ranges))):
+		if ranges[i -1] - ranges[i] > disparity_threshold:
+			# There is a disparity at index i
+			set_to_zero.append(set_safety_bubble(i))
+
+	for r in set_to_zero:
+		for i in range(r[0], r[1]):
+			ranges[i] = 0
+
+	# List of all gaps
+	# Each gap is a tuple: (start index, end index)
+	gaps = []
+
+	# We want to find every gap 
+	# ^ occurs when a nonzero value is next to a 0
+	gap_start = 0
+	for i in range(1, len(ranges) - 1):
+		
+		if ranges[i - 1] == 0 and ranges[i] != 0:
+			# If ranges[i-1] is 0 and ranges[i] isn't, we must be at the start of a gap
+			gap_start = i
+		if ranges[i + 1] == 0 and ranges[i] != 0:
+			# If ranges[i+1] is 0 and ranges[i] isn't, we must be at the end of a gap
+			# Append the gap to the gaps list
+			print('Gap from', gap_start, i)
+			gaps.append((gap_start, i))
+
+	# In case a gap extends past the fov
+	gaps.append((gap_start, len(ranges) - 1))
+	gap_metrics = []
+
+	# This is inefficient but I'm doing this for readability
+	# Finds the gap metric of all gaps
+	for gap in gaps:
+		sliced = ranges[gap[0]:gap[1] + 1]
+		min_depth = min(sliced)
+		max_depth = max(sliced)
+		gap_width = dist_between_measurements(ranges[gap[0]], ranges[gap[1]], angle_between_indices(gap[0], gap[1]))
+		avg_dist = sum(sliced)/(gap[1] - gap[0] + 1)
+		gap_metrics.append(avg_dist*(max_depth**0.5)*gap_width)
+
+	# Finds the best gap according to the gap metric
+	max_metric = 0
+	best_gap = 0
+	for i in range(len(gap_metrics)):
+		if gap_metrics[i] > max_metric:
+			max_metric = gap_metrics[i]
+			best_gap = i
+
+	print(gaps)
+	print(gap_metrics)
+
+	far_ind = 0
+	far_dist = 0
+	for i in range(gaps[best_gap][0], gaps[best_gap][1]):
+		if ranges[i] > far_dist:
+			far_dist = ranges[i]
+			far_ind = i
+
+	print("Best gap is gap #", best_gap)
+	print("Best gap:", gaps[best_gap])
+	print("Target angle:", 15 + far_ind/(len(ranges)/150))
+	print("Target index:", far_ind)
+
+	return 15 + far_ind/(len(ranges)/150)
 	'''
 	ranges = []
 	closest_point = data.range_max + 1
@@ -131,10 +222,7 @@ def ftg_target_angle(data):
 	for i in range(max(0, closest_point_ind - bubble_rad), min(len(data.ranges), closest_point_ind + bubble_rad)):
 		ranges[i] = 0
 	'''
-	
-	last_measurement = ranges[0]
-	disparity_ind = 0
-	in_disparity = False
+	'''
 	for i in range(1, len(ranges)):
 
 		if in_disparity:
@@ -149,11 +237,17 @@ def ftg_target_angle(data):
 				disparity_ind = i-1
 				ranges[i] = ranges[i - 1]
 			last_measurement = ranges[i]
+	
+	last_measurement = ranges[0]
+	disparity_ind = 0
+	in_disparity = False
+	'''
 
 	# Create Safety Bubble - Full Implementation
 	"""
 	I think this is the proper implementation but it seems computationally very expensive
 	"""
+	'''
 	ind = closest_point_ind + 1
 	while ind < len(ranges) and dist_between_measurements(closest_point, ranges[ind], angle_increment * (ind - closest_point_ind)) <= car_width:
 		ranges[ind] = 0
@@ -165,7 +259,7 @@ def ftg_target_angle(data):
 		
 	print('Closest point:' + str(closest_point) + ' at ' + str(closest_point_ind/angle_increment - 30) + ' degrees')
 	'''		
-	# Disparity Extender
+	'''
 	last_measurement = ranges[0]
 	disparity_ind = 0
 	in_disparity = False
@@ -182,6 +276,9 @@ def ftg_target_angle(data):
 			ranges[i] = ranges[i - 1]
 		last_measurement = ranges[i]
 	'''
+	# Disparity Extender
+
+	
 	'''
 	# Find Max Gap
 	max_gap = (0, 0)
@@ -236,7 +333,7 @@ def ftg_target_angle(data):
 	# print(data.angle_increment)
 	# print(-30 + ((max_gap[0] + max_gap[1])/2)*angle_increment)	
 	# return -30 + ((max_gap[0] + max_gap[1])/2)*data.angle_increment
-	'''
+	
 	max_gap = (0, 0)
 	gap_start = 0
 	current_deepest_in_gap = 0
@@ -271,7 +368,7 @@ def ftg_target_angle(data):
 	print('[' + str(max_gap[0]/angle_increment - 30) + ', ' + str(max_gap[1]/angle_increment - 30) + ']')
 	print('Going ' + str(current_deepest_in_gap_ind/angle_increment - 30) + ' degrees')
 	return -30 + (current_deepest_in_gap_ind/angle_increment)
-
+	'''
 
 def callback(data):
 	global forward_projection
