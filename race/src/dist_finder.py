@@ -73,32 +73,57 @@ def ftg_target_angle(data):
 	"""
 	global gap_threshold
 	global angle_increment
-	angle_increment = len(data.ranges) / angle_range
-
+	angle_increment = len(data.ranges) / fov
 	# Copy the distance into a list that can be manipulated in order to preserve the original data
-	ranges = data.ranges.copy()
-
+	# ranges = data.ranges.copy()
+	# print(data.ranges)
+	ranges = []
 	closest_point = data.range_max + 1
 	closest_point_ind = -1
-	for i in range(len(data.ranges)):
+	correction = (240 - fov)/(2*angle_increment)
+	for i in range(correction, len(data.ranges) - correction):
 		dist = data.ranges[i]
+		'''
 		if dist < closest_point:
 			closest_point = dist
 			closest_point_ind = i
-		ranges.append(dist)
+		'''
+		if math.isnan(dist):
+			# print('nan found')
+			dist = 6
+			ranges.append(dist)
+		elif dist < data.range_min:
+			dist = 6
+			ranges.append(dist)	
+		else:
+			# print(dist)
+			# print(math.isnan(dist))
+			ranges.append(dist)
+		
+		if dist < closest_point:
+			closest_point = dist
+			closest_point_ind = i - correction
+
+	# print(ranges)
+	# print(ranges[closest_point_ind])
+	print('closest point at', closest_point_ind , 'at distance', closest_point)
+	
+	def ind_to_deg(index):
+		return 15 + (index/angle_increment)
 
 	def set_safety_bubble(index):
+		print(index, len(ranges))
 		# print(ranges, index)
 		lo = index - 1
 		hi = index + 1
-		
-		while lo >= 0 and dist_between_measurements(ranges[index], ranges[index], angle_between_indices(lo, index)) <= .5 * car_width and ranges[lo] >= ranges[index] :
+		# print(index, ranges[index])
+		while lo >= 0 and index-lo < 300 and dist_between_measurements(ranges[index], ranges[index], angle_between_indices(lo, index)) <= .5 * car_width and ranges[lo] >= ranges[index] :
 			# print(ranges[lo] >= ranges[index])
 			# print(dist_between_measurements(ranges[index], ranges[index], angle_between_indices(lo, index)))
 			# ranges[lo] = 0
 			lo -= 1
 
-		while hi < len(ranges) and dist_between_measurements(ranges[index], ranges[index], angle_between_indices(index, hi)) <= .5 * car_width and ranges[hi] >= ranges[index] :
+		while hi < len(ranges) and hi-index < 300 and dist_between_measurements(ranges[index], ranges[index], angle_between_indices(index, hi)) <= .5 * car_width and ranges[hi] >= ranges[index] :
 			# print(index, hi, angle_increment)
 			# dist_between_measurements(ranges[index], ranges[index], angle_between_indices(index, hi))
 			# print('hi', hi)
@@ -107,34 +132,38 @@ def ftg_target_angle(data):
 
 		# ranges[index] = 0
 		# Return the range to set to 0s (I can explain why we don't directly set them to 0)
-		print('Lo, hi', lo, hi)
+		# print('Lo, hi', lo, hi)
 		return (lo, hi)
 
 	# Holds all ranges that I should set to zero (safety bubbles)
 	set_to_zero = []
 	set_to_zero.append(set_safety_bubble(closest_point_ind))
-
+	
 	# Set a safety bubble around all disparities
 	# DISCLAIMER: This isn't the most efficient but it should be fast enough and is more readable
 	# Worst case: everything will be set to 0 at most twice so this isn't an O(n^2) algorithm I think
 	for i in range(0, len(ranges) - 1):
-		if ranges[i+1] - ranges[i] > disparity_threshold:
+		if ranges[i+1] - ranges[i] > disparity_threshold and ranges[i] <3:
 			# There is a disparity at index i
+			# print(i)
 			set_to_zero.append(set_safety_bubble(i))
     
 	for i in reversed(range(1, len(ranges))):
-		if ranges[i -1] - ranges[i] > disparity_threshold:
+		if ranges[i -1] - ranges[i] > disparity_threshold and ranges[i] < 3:
 			# There is a disparity at index i
+			# print(i)
 			set_to_zero.append(set_safety_bubble(i))
 
 	for r in set_to_zero:
 		for i in range(r[0], r[1]):
 			ranges[i] = 0
 
+	# print(ranges)
 	# List of all gaps
 	# Each gap is a tuple: (start index, end index)
 	gaps = []
-
+	# print(set_to_zero)
+	#print(ranges)
 	# We want to find every gap 
 	# ^ occurs when a nonzero value is next to a 0
 	gap_start = 0
@@ -146,13 +175,15 @@ def ftg_target_angle(data):
 		if ranges[i + 1] == 0 and ranges[i] != 0:
 			# If ranges[i+1] is 0 and ranges[i] isn't, we must be at the end of a gap
 			# Append the gap to the gaps list
-			print('Gap from', gap_start, i)
+			# print('Gap from', gap_start, i)
 			gaps.append((gap_start, i))
-
+			gap_start = i
+		
 	# In case a gap extends past the fov
 	gaps.append((gap_start, len(ranges) - 1))
 	gap_metrics = []
-
+	gap_metrics_uncombined = []
+	
 	# This is inefficient but I'm doing this for readability
 	# Finds the gap metric of all gaps
 	for gap in gaps:
@@ -161,7 +192,8 @@ def ftg_target_angle(data):
 		max_depth = max(sliced)
 		gap_width = dist_between_measurements(ranges[gap[0]], ranges[gap[1]], angle_between_indices(gap[0], gap[1]))
 		avg_dist = sum(sliced)/(gap[1] - gap[0] + 1)
-		gap_metrics.append(avg_dist*(max_depth**0.5)*gap_width)
+		gap_metrics.append(avg_dist*(max_depth**.5)*gap_width)
+		gap_metrics_uncombined.append((min_depth, max_depth, gap_width, avg_dist))
 
 	# Finds the best gap according to the gap metric
 	max_metric = 0
@@ -171,22 +203,29 @@ def ftg_target_angle(data):
 			max_metric = gap_metrics[i]
 			best_gap = i
 
-	print(gaps)
-	print(gap_metrics)
-
+	print('Gaps', gaps)
+	print('Gap metrics', gap_metrics)
+	print('Gap metrics uncombined', gap_metrics_uncombined)
 	far_ind = 0
 	far_dist = 0
 	for i in range(gaps[best_gap][0], gaps[best_gap][1]):
 		if ranges[i] > far_dist:
 			far_dist = ranges[i]
 			far_ind = i
-
+	'''
+	if gap_metrics_uncombined[best_gap][0] > 2:
+		print("Best gap is gap #", best_gap)
+		print('Best gap:', gaps[best_gap])
+		print('Target angle:', ind_to_deg(far_ind))
+		print('Target index:', far_ind)	
+		return ind_to_deg((gaps[best_gap][0]+gaps[best_gap][1])/2)
+	'''
 	print("Best gap is gap #", best_gap)
 	print("Best gap:", gaps[best_gap])
-	print("Target angle:", 15 + far_ind/(len(ranges)/150))
+	print("Target angle:", far_ind/(len(ranges)/fov))
 	print("Target index:", far_ind)
-
-	return 15 + far_ind/(len(ranges)/150)
+	
+	return ind_to_deg(far_ind)
 	'''
 	ranges = []
 	closest_point = data.range_max + 1
