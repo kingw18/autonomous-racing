@@ -12,7 +12,7 @@ desired_distance = 0.9	# distance from the wall (in m). (defaults to right wall)
 vel = 15 		# this vel variable is not really used here.
 error = 0.0		# initialize the error
 car_length = 0.50 # Traxxas Rally is 20 inches or 0.5 meters
-car_width = 0.3	# Car is about 30cm wide
+car_width = 0.4	# Car is about 30cm wide
 prev_distance = 0
 forward_angle = 90	# Angle representing the direction the car is currently facing
 min_threshold = 0.05
@@ -28,6 +28,7 @@ fov = 150
 pub = rospy.Publisher('error', pid_input, queue_size=10)
 
 # Lidar's min range is .02 and max range is 6
+"""
 def getRange(data, angle):
 	# data: single message from topic /scan
     # angle: between -30 to 210 degrees, where 0 degrees is directly to the right, and 90 degrees is directly in front
@@ -52,6 +53,7 @@ def getRange(data, angle):
 		prev_distance=distance	
 		return distance
 	return prev_distance
+"""
 
 
 def dist_between_measurements(dist1, dist2, angle):
@@ -64,7 +66,8 @@ def dist_between_measurements(dist1, dist2, angle):
 
 # Get the angle between 2 indices in ranges
 def angle_between_indices(lower, higher):
-    return abs(higher - lower)/angle_increment
+	global angle_increment
+	return abs(higher - lower)/angle_increment
 
 def ftg_target_angle(data):
 	
@@ -73,14 +76,14 @@ def ftg_target_angle(data):
 	"""
 	global gap_threshold
 	global angle_increment
-	angle_increment = len(data.ranges) / fov
+	angle_increment = len(data.ranges) / angle_range
 	# Copy the distance into a list that can be manipulated in order to preserve the original data
 	# ranges = data.ranges.copy()
-	# print(data.ranges)
+	print('len:', len(data.ranges))
 	ranges = []
 	closest_point = data.range_max + 1
 	closest_point_ind = -1
-	correction = (240 - fov)/(2*angle_increment)
+	correction = (240 - fov)*angle_increment/2
 	for i in range(correction, len(data.ranges) - correction):
 		dist = data.ranges[i]
 		'''
@@ -92,7 +95,7 @@ def ftg_target_angle(data):
 			# print('nan found')
 			dist = 6
 			ranges.append(dist)
-		elif dist < data.range_min:
+		elif dist < data.range_min + .0001:
 			dist = 6
 			ranges.append(dist)	
 		else:
@@ -106,24 +109,26 @@ def ftg_target_angle(data):
 
 	# print(ranges)
 	# print(ranges[closest_point_ind])
-	print('closest point at', closest_point_ind , 'at distance', closest_point)
-	
+	# print('closest point at', ind_to_deg(closest_point_ind) , 'at distance', closest_point)
+		
 	def ind_to_deg(index):
 		return 15 + (index/angle_increment)
 
+	print('closest point at', ind_to_deg(closest_point_ind), 'at distance', closest_point)
+	# print("Min Degrees:", ind_to_deg(0), "Max Degrees", ind_to_deg(len(ranges) - 1), 'Correction:', correction)
 	def set_safety_bubble(index):
-		print(index, len(ranges))
+		# print(index, len(ranges))
 		# print(ranges, index)
 		lo = index - 1
 		hi = index + 1
 		# print(index, ranges[index])
-		while lo >= 0 and index-lo < 300 and dist_between_measurements(ranges[index], ranges[index], angle_between_indices(lo, index)) <= .5 * car_width and ranges[lo] >= ranges[index] :
+		while lo >= 0 and index-lo < 300 and dist_between_measurements(ranges[index], ranges[index], angle_between_indices(lo, index)) <= .5 * car_width:  #and ranges[lo] >= ranges[index] :
 			# print(ranges[lo] >= ranges[index])
 			# print(dist_between_measurements(ranges[index], ranges[index], angle_between_indices(lo, index)))
 			# ranges[lo] = 0
 			lo -= 1
 
-		while hi < len(ranges) and hi-index < 300 and dist_between_measurements(ranges[index], ranges[index], angle_between_indices(index, hi)) <= .5 * car_width and ranges[hi] >= ranges[index] :
+		while hi < len(ranges) and hi-index < 300 and dist_between_measurements(ranges[index], ranges[index], angle_between_indices(index, hi)) <= .5 * car_width: # and ranges[hi] >= ranges[index] :
 			# print(index, hi, angle_increment)
 			# dist_between_measurements(ranges[index], ranges[index], angle_between_indices(index, hi))
 			# print('hi', hi)
@@ -133,6 +138,7 @@ def ftg_target_angle(data):
 		# ranges[index] = 0
 		# Return the range to set to 0s (I can explain why we don't directly set them to 0)
 		# print('Lo, hi', lo, hi)
+		print('Safety bubble set at:', ind_to_deg(index), 'to', ind_to_deg(lo), ind_to_deg(hi))
 		return (lo, hi)
 
 	# Holds all ranges that I should set to zero (safety bubbles)
@@ -177,7 +183,7 @@ def ftg_target_angle(data):
 			# Append the gap to the gaps list
 			# print('Gap from', gap_start, i)
 			gaps.append((gap_start, i))
-			gap_start = i
+			gap_start = i+1
 		
 	# In case a gap extends past the fov
 	gaps.append((gap_start, len(ranges) - 1))
@@ -186,7 +192,9 @@ def ftg_target_angle(data):
 	
 	# This is inefficient but I'm doing this for readability
 	# Finds the gap metric of all gaps
+	print('Gaps:',)
 	for gap in gaps:
+		print('(', ind_to_deg(gap[0]), ind_to_deg(gap[1]),')',)
 		sliced = ranges[gap[0]:gap[1] + 1]
 		min_depth = min(sliced)
 		max_depth = max(sliced)
@@ -195,6 +203,7 @@ def ftg_target_angle(data):
 		gap_metrics.append(avg_dist*(max_depth**.5)*gap_width)
 		gap_metrics_uncombined.append((min_depth, max_depth, gap_width, avg_dist))
 
+	print()
 	# Finds the best gap according to the gap metric
 	max_metric = 0
 	best_gap = 0
@@ -203,9 +212,9 @@ def ftg_target_angle(data):
 			max_metric = gap_metrics[i]
 			best_gap = i
 
-	print('Gaps', gaps)
+	
 	print('Gap metrics', gap_metrics)
-	print('Gap metrics uncombined', gap_metrics_uncombined)
+	# print('Gap metrics uncombined', gap_metrics_uncombined)
 	far_ind = 0
 	far_dist = 0
 	for i in range(gaps[best_gap][0], gaps[best_gap][1]):
@@ -221,11 +230,13 @@ def ftg_target_angle(data):
 		return ind_to_deg((gaps[best_gap][0]+gaps[best_gap][1])/2)
 	'''
 	print("Best gap is gap #", best_gap)
-	print("Best gap:", gaps[best_gap])
-	print("Target angle:", far_ind/(len(ranges)/fov))
+	print("Best gap from:", ind_to_deg(gaps[best_gap][0]), 'to', ind_to_deg(gaps[best_gap][1]))
+	print("Target angle:", ind_to_deg(far_ind))
 	print("Target index:", far_ind)
 	
-	return ind_to_deg(far_ind)
+	middle_of_gap = (gaps[best_gap][0] + gaps[best_gap][1])/2
+	print("Middle of gap:", ind_to_deg(middle_of_gap))
+	return ind_to_deg(.45 *far_ind + .55 * middle_of_gap)
 	'''
 	ranges = []
 	closest_point = data.range_max + 1
