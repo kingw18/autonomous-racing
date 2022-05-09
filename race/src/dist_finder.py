@@ -435,6 +435,7 @@ def ftg_target_angle(data):
 	return -30 + (current_deepest_in_gap_ind/angle_increment)
 	'''
 
+
 def callback(data):
 	global forward_projection
 

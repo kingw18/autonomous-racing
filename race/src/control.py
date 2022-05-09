@@ -28,6 +28,7 @@ vel_input = 0.0	#TODO
 # TODO: Use the coorect topic /car_x/offboard/command.
 command_pub = rospy.Publisher('/car_3/offboard/command', AckermannDrive, queue_size = 1)
 
+
 def control(data):
 	global prev_error
 	global vel_input
@@ -90,6 +91,7 @@ def control(data):
 	# print("Speed:", set_speed)
 	# Move the car autonomously
 	command_pub.publish(command)
+
 
 if __name__ == '__main__':
 	# global kp
