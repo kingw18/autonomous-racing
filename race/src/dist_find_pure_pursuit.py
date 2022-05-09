@@ -4,7 +4,7 @@ import rospy
 import math
 from sensor_msgs.msg import LaserScan
 from race.msg import pid_input
-from geometry_msgs.msg import PoseStamped	# TODO: Proper package of msg
+from geometry_msgs.msg import PoseStamped
 
 # Some useful variable declarations.
 angle_range = 240  # Hokuyo 4LX has 240 degrees FoV for scan
@@ -89,8 +89,6 @@ def goal_point():
 	# Lots of math to interpolate between the two waypoints-- not sure if this can be simplified?
 	a = short_dist
 	c = dist(waypoints[large_i], waypoints[small_i])
-	theta = math.atan2(waypoints[small_i][1] - waypoints[large_i][1], waypoints[small_i][0] - waypoints[large_i][0]) \
-			- math.atan2(car_y - waypoints[large_i][1], car_x - waypoints[large_i][0])
 	phi = math.atan2(car_y - waypoints[small_i][1], car_x - waypoints[small_i][0]) \
 			- math.atan2(waypoints[large_i][1] - waypoints[small_i][1], waypoints[large_i][0] - waypoints[small_i][0])
 	k = quad_formula(1, -2 * a * math.cos(phi), a**2 - lookahead_dist**2)
@@ -113,7 +111,7 @@ def find_steering_angle():
 	"""
 	Determines the steering angle based on the current inferred position
 	"""
-	goal = goal_point()	# TODO: Determine goal point
+	goal = goal_point()
 	goal = (goal[0] - car_x, goal[1] - car_y)	# Translate origin to car position
 	# Roatate so that x axis is along the car
 	goal = (goal[0] * math.sin(car_theta) + goal[1] * math.cos(car_theta), goal[0] * math.cos(car_theta) - goal[1] * math.sin(car_theta))
