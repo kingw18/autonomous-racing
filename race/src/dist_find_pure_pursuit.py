@@ -94,10 +94,10 @@ def goal_point():
 	phi = math.atan2(car_y - waypoints[small_i][1], car_x - waypoints[small_i][0]) \
 			- math.atan2(waypoints[large_i][1] - waypoints[small_i][1], waypoints[large_i][0] - waypoints[small_i][0])
 	k = quad_formula(1, -2 * a * math.cos(phi), a**2 - lookahead_dist**2)
-	return (c - k) * math.sin(theta), (c - k) * math.cos(theta)
-
-
-
+	q = k / c
+	new_x = waypoints[small_i][0] + (waypoints[large_i][0] - waypoints[small_i][0]) * q
+	new_y = waypoints[small_i][1] + (waypoints[large_i][1] - waypoints[small_i][1]) * q
+	return new_x, new_y
 
 
 def dist_between_measurements(dist1, dist2, angle):
@@ -113,7 +113,7 @@ def find_steering_angle():
 	"""
 	Determines the steering angle based on the current inferred position
 	"""
-	goal = (0, 0)	# TODO: Determine goal point
+	goal = goal_point()	# TODO: Determine goal point
 	goal = (goal[0] - car_x, goal[1] - car_y)	# Translate origin to car position
 	# Roatate so that x axis is along the car
 	goal = (goal[0] * math.sin(car_theta) + goal[1] * math.cos(car_theta), goal[0] * math.cos(car_theta) - goal[1] * math.sin(car_theta))
