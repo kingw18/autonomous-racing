@@ -13,8 +13,8 @@ prev_error = 0.0
 err_sum = 0
 err_queue = [] 
 err_queue_size = 20
+
  
-time_low_error = 0
 # This code can input desired velocity from the user.
 # velocity must be between [0,100] to move forward. 
 # The following velocity values correspond to different speed profiles.
@@ -39,7 +39,6 @@ def control(data):
 	angle = 0.0
 	global err_queue
 	global err_queue_size
-	global time_low_error
 	print("PID Control Node is Listening to error")
 	
 	## Your PID code goes here
@@ -47,13 +46,11 @@ def control(data):
 	
 	# 1. Scale the error
 	# err_scaled = data.pid_error*scalar
-	
 	if len(err_queue) >= err_queue_size:
 		err_sum -= err_queue.pop()
 	
 	err_sum += data.pid_error
 	err_queue.insert(0, data.pid_error)
-	# err_sum += data.pid_error
 	error = data.pid_error
 	# print("Error:", error)
 	# 2. Apply the PID equation on error to compute steering
@@ -73,9 +70,11 @@ def control(data):
 	command.steering_angle = angle
 	
 	
-	if abs(error) > 1.21:
-		set_speed = vel_input*1.1/math.sqrt(abs(error))
+	if abs(error) > 1.96:
+		set_speed = vel_input*1.4/math.sqrt(abs(error))
 		# print("Scaled speed to:", set_speed)
+	elif error == 0:
+		set_speed = 60
 	else:
 		set_speed = vel_input
 	if set_speed < 15:
