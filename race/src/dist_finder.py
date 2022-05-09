@@ -12,37 +12,28 @@ desired_distance = 0.9	# distance from the wall (in m). (defaults to right wall)
 vel = 15 		# this vel variable is not really used here.
 error = 0.0		# initialize the error
 car_length = 0.50 # Traxxas Rally is 20 inches or 0.5 meters
-car_width = 0.50  # TODO: How wide is the car??
+car_width = 0.3	# Car is about 30cm wide
 prev_distance = 0
 forward_angle = 90	# Angle representing the direction the car is currently facing
-
+min_threshold = 0.05
 # FTG Variables
-gap_threshold = 1.0	# Threshold distance for defining gap
-bubble_rad = 10	# The radius (in angle increments) of the safety bubble (naive implementation)
+gap_threshold = 0.1	# Threshold distance for defining gap
+bubble_rad = 100	# The radius (in angle increments) of the safety bubble (naive implementation)
+depth_threshold=2.5
+disparity_threshold=0.5	# The difference required to create a disparity
+fov_width = input("Enter FOV in degrees: ")
+obst_theta = input("Enter obstacle finding angle: ")
 
 # Handle to the publisher that will publish on the error topic, messages of the type 'pid_input'
 pub = rospy.Publisher('error', pid_input, queue_size=10)
 
-
+# Lidar's min range is .02 and max range is 6
 def getRange(data, angle):
 	# data: single message from topic /scan
     # angle: between -30 to 210 degrees, where 0 degrees is directly to the right, and 90 degrees is directly in front
     # Outputs length in meters to object with angle in lidar scan field of view
     # Make sure to take care of NaNs etc.
 	global prev_distance
-	'''
-	# Convert angle to LIDAR's coordinates
-	angle += 30
-	angle = math.radians(angle)
-
-	# Get index
-	angle_ind = int(round(angle / data.angle_increment))
-
-	distance = data.ranges[angle_ind]
-	if data.range_min <= distance <= data.range_max:
-		return distance
-	return 100.0	# TODO: Better implementation of NaNs?
-	'''
 	distance = data.ranges[int((angle+30)*len(data.ranges)/240)]
 	if data.range_min <= distance <= data.range_max:
 		prev_distance=distance	
@@ -63,68 +54,128 @@ def ftg_target_angle(data):
 	"""
 	Returns the target goal determine by Follow-The-Gap in degrees
 	"""
-	angle_increment = len(data.ranges) / angle_range
-
-	# Copy the distance into a list that can be manipulated in order to preserve the original data
+	global gap_threshold
 	ranges = []
 	closest_point = data.range_max + 1
 	closest_point_ind = -1
-	for i in range(len(data.ranges)):
+	angle_increment = len(data.ranges) / angle_range
+	fov_angle_index = int(angle_increment*(240-fov_width)/2)
+	
+	"""
+	STEP 1 & 2
+	Step 1: Preprocess the laser scans and set the FOV
+	Step 2: Find the closest point
+	"""
+	for i in range(fov_angle_index, len(data.ranges) - fov_angle_index):
 		dist = data.ranges[i]
-		if not data.range_min <= dist <= data.range_max:
-			ranges.append(data.range_max + 1) # Use as a substitute for infinity, actual value shouldn't matter as long as its greater than max
-		else:
-			if dist < closest_point:
-				closest_point = dist
-				closest_point_ind = i
+		angle_from_fwd = abs(len(data.ranges)/2 - i)/angle_increment
+		if dist < closest_point and dist >= min_threshold and angle_from_fwd <= obst_theta:
+			closest_point = dist
+			closest_point_ind = i - fov_angle_index
 			ranges.append(dist)
-
-	# Create Safety Bubble - Naive Implementation
-	"""
-	This just creates the bubble around a certain number of measurements on either side of the closest point.
-	I remember Prof. Behl saying in lecture that a more proper implementation would actually compute distances
-	to make the radius of the bubble equal to the width of the car. I tried to implement that below
-	"""
-	for i in range(max(0, closest_point_ind - bubble_rad), min(len(data.ranges), closest_point_ind + bubble_rad)):
-		ranges[i] = 0
-
-	# # Create Safety Bubble - Full Implementation
-	# """
-	# I think this is the proper implementation but it seems computationally very expensive
-	# """
-	# ind = closest_point_ind + 1
-	# while ind < len(ranges) and dist_between_measurements(closest_point, ranges[ind], angle_increment * (ind - closest_point_ind)) <= car_width:
-	# 	ranges[ind] = 0
-	# 	ind += 1
-	# ind = closest_point_ind - 1
-	# while ind >= 0 and dist_between_measurements(closest_point, ranges[ind], angle_increment * (closest_point_ind - ind)) <= car_width:
-	# 	ranges[ind] = 0
-	# 	ind -= 1
-
-	# TODO: Disparity Extender
-
-	# Find Max Gap
-	max_gap = (0, 0)
-	gap_start = 0
-	in_gap = False
+		
+		elif dist > data.range_max or dist <= min_threshold:
+			if i != 0 and i != len(data.ranges) - 1:
+				ranges.append((data.ranges[i-1] + data.ranges[i+1])/2)
+			else:
+				if i == 0:
+					ranges.append(data.ranges[i+1])
+				else:
+					ranges.append(data.ranges[i-1])
+					
+		else:
+			ranges.append(dist)
+	
 	for i in range(len(ranges)):
-		if in_gap and ranges[i] == 0:	# Should we compare directly to 0 or within a certain threshold?
-			if i - gap_start > max_gap[1] - max_gap[0]:
-				max_gap = (gap_start, i)
-			in_gap = False
-		elif not in_gap and ranges[i] > 0:
-			gap_start = i
-			in_gap = True
+		if ranges[i] < min_threshold or ranges[i] > data.range_max:
+			ranges[i] = data.range_max + 2
+	
+	"""
+	STEP 3
+	Disparity extender and safety bubble
+	"""
+	# CCW
+	last_measurement = ranges[0]
+	disparity_ind = 0
+	in_disparity = False
+	for i in range(1, len(ranges)):
+		if in_disparity:
+			if dist_between_measurements(ranges[disparity_ind], ranges[disparity_ind], (i-disparity_ind)/angle_increment) <= 2.5 * car_width:
+				if ranges[i] > ranges[disparity_ind]:
+					ranges[i] = ranges[disparity_ind]			
+				else:
+					in_disparity = False
 
-	# Find target angle - Naive Implementation (Find deepest point)
-	max_ind = -1
+		elif ranges[i] > last_measurement + disparity_threshold and not in_disparity:
+			in_disparity = True
+			disparity_ind = i-1
+			ranges[i] = ranges[i - 1]
+		last_measurement = ranges[i]
+	# CLOCKWISE
+	last_measurement = ranges[len(ranges)-1]
+	disparity_ind = len(ranges) - 1
+	in_disparity = False
+	for i in reversed(range(0, len(ranges)-1)):
+		if in_disparity:
+			if dist_between_measurements(ranges[disparity_ind], ranges[disparity_ind], (disparity_ind-i)/angle_increment) <= 2.5 * car_width:
+				if ranges[i] > ranges[disparity_ind]:
+					ranges[i] = ranges[disparity_ind]			
+				else:
+					in_disparity = False
+
+		elif ranges[i] > last_measurement + disparity_threshold and not in_disparity:
+			in_disparity = True
+			disparity_ind = i + 1
+			ranges[i] = ranges[i + 1]
+		last_measurement = ranges[i]
+	
+	left_zero_ind = len(ranges)
+	right_zero_ind = 0
+	ind = closest_point_ind + 1
+	while ind < len(ranges) and dist_between_measurements(closest_point, ranges[ind], angle_increment * (ind - closest_point_ind)) <= 3*car_width:
+		ranges[ind] = 0
+		left_zero_ind = ind
+		ind += 1
+	ind = closest_point_ind - 1
+	# print('First ind going right', ind)
+	while ind >= 1 and dist_between_measurements(closest_point, ranges[ind], angle_increment * (closest_point_ind - ind)) <= 3*car_width:
+		ranges[ind] = 0
+		right_zero_ind = ind
+		ind -= 1
+	#	print("ind in right while:", ind)
+	ranges[closest_point_ind] = 0
+	"""
+	STEP 4
+	Find the widest gap
+	"""
+	if right_zero_ind <= 1:
+		max_gap = (left_zero_ind, len(ranges) - 1)
+	elif left_zero_ind > len(ranges)-3:
+		max_gap = (0, right_zero_ind, ind)
+	elif max(ranges[:right_zero_ind]) > depth_threshold and max(ranges[left_zero_ind:]) < depth_threshold:
+		max_gap = (0, right_zero_ind)
+	elif max(ranges[:right_zero_ind]) < depth_threshold and max(ranges[left_zero_ind:]) > depth_threshold:
+		max_gap = (left_zero_ind, len(ranges) - 1)
+	elif len(ranges) - 1 - left_zero_ind > right_zero_ind:
+		max_gap = (left_zero_ind, len(ranges) - 1)
+	else:
+		max_gap = (0, right_zero_ind)
+	
 	deepest_dist = 0
+	deepest_dist_ind = 0
 	for i in range(max_gap[0], max_gap[1]):
 		if ranges[i] > deepest_dist:
+			deepest_dist_ind = i
 			deepest_dist = ranges[i]
-			max_ind = i
-
-	return -30 + (max_ind * angle_increment)
+	print('Closest point:' + str(closest_point) + ' at ' + str((closest_point_ind+fov_angle_index)/angle_increment - 30) + ' degrees')
+	print('Min index:' ,max_gap[0],'Max index:', max_gap[1])
+	print('Min: ' + str((max_gap[0]+fov_angle_index)/angle_increment - 30) + ' Max: ' + str((max_gap[1]+fov_angle_index)/angle_increment - 30))
+	# target = -30 + (240-fov_width)/2 + (max_gap[0] + max_gap[1])/(2*angle_increment)
+	target = (-30 + (240-fov_width)/2 + (deepest_dist_ind/angle_increment))
+	print('Target:', target)
+	# print('Range:', len(ranges))
+	print('Left index:',left_zero_ind, 'Right index:', right_zero_ind)
+	return target
 
 
 def callback(data):
@@ -143,13 +194,16 @@ def callback(data):
 	alpha = math.atan((a * math.cos(theta) - b)/(a * math.sin(theta)))
 	"""
 	alpha = ftg_target_angle(data) - forward_angle
+	# print(alpha+forward_angle)
 	alpha = math.radians(alpha)
+
 	# AB = b * math.cos(alpha)
 	# AC = vel
 	# CD = AB + AC * math.sin(alpha)
-	error = vel * math.sin(vel * math.sin(alpha))
-	
-
+	# error = vel * math.sin(vel * math.sin(alpha))  # ADD THIS BACK LATER PROBABLY
+	error = vel * alpha
+	# print(error)	
+	print('Error:', error)
 	msg = pid_input()	# An empty msg is created of the type pid_input
 	# this is the error that you want to send to the PID for steering correction.
 	msg.pid_error = error	
