@@ -3,6 +3,5 @@
     <arg name="listen_offboard" value="true" />
   </include>
   <node name="control" pkg="race" type="control.py" output="screen"/>
-  <node name="distance_finder" pkg="race" type="distance_finder.py" output="screen"/>
-  <include file"$(find move_base)/launch/remote_teleop.launch" />
+  <node name="dist_finder" pkg="race" type="dist_finder.py" output="screen"/>
 </launch>
