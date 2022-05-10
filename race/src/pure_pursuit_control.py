@@ -14,7 +14,9 @@ err_sum = 0
 err_queue = [] 
 err_queue_size = 10
 min_speed = 25
-max_speed = 50 
+max_speed = 50
+err_thresh = 1.44
+err_exp = 0.33
 # This code can input desired velocity from the user.
 # velocity must be between [0,100] to move forward. 
 # The following velocity values correspond to different speed profiles.
@@ -87,8 +89,8 @@ def control(data):
 	'''
 	# min_speed = 25
 	# max_speed = 80
-	if abs(error) > 1.21:
-		set_speed = vel_input*1.1/math.sqrt(abs(error))
+	if abs(error) > err_thresh:
+		set_speed = vel_input*((err_thresh / abs(error)) ** 0.5)
 	else:
 		set_speed = vel_input
 	if set_speed < min_speed:
