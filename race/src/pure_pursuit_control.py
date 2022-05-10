@@ -90,7 +90,7 @@ def control(data):
 	# min_speed = 25
 	# max_speed = 80
 	if abs(error) > err_thresh:
-		set_speed = vel_input*((err_thresh / abs(error)) ** 0.5)
+		set_speed = vel_input*((err_thresh / abs(error)) ** err_exp)
 	else:
 		set_speed = vel_input
 	if set_speed < min_speed:
