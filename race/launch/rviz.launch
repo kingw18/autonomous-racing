@@ -1,0 +1,4 @@
+<launch>
+	<include file = "$(find move_base)/launch/remote_teleop.launch"/>
+	<node type="rviz" name="rviz" pkg="rviz" args="-d $(find race)/src/config.rviz"/>
+</launch>
