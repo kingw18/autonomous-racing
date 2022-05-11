@@ -42,7 +42,7 @@ waypoints = [
 '''
 
 cv_ld = 1.25
-s_ld = 2
+s_ld = 2.5
 cv_an = 1
 sc_an = 0.8
 s_an = 0.5
@@ -51,8 +51,8 @@ waypoints = [
 	(0.3, 0, s_ld, s_an), (0.75, -.25, s_ld, s_an), (1.1, -.45, s_ld, s_an), (1.45, -.61, cv_ld, cv_an), (2.07, -.8, cv_ld, cv_an), (2.9, -0.87, cv_ld, cv_an), (3.25, -.7, cv_ld, cv_an), (3.4, -.45, cv_ld, cv_an),
 	(3.4, 0.16, cv_ld, cv_an), (3.25, 0.57, cv_ld, cv_an), (2.8, 0.86, cv_ld, cv_an), (2.2, 1.2, cv_ld, cv_an), (1.9, 1.45, cv_ld, cv_an), (1.8, 1.75, cv_ld, cv_an), (1.9, 2.09, cv_ld, cv_an), (2.3, 2.4, cv_ld, cv_an),
 	(2.69, 2.55, cv_ld, cv_an), (3.39, 2.6, cv_ld, cv_an), (3.9, 2.65, cv_ld, cv_an), (4.4, 2.9, cv_ld, cv_an), (4.5, 3.41, cv_ld, cv_an), (4.4, 3.8, cv_ld, cv_an), (3.92, 4.24, s_ld, s_an), (3.1, 4.62, s_ld, s_an),
-	(2.22, 5, s_ld, s_an), (1.27, 5.2, s_ld, s_an), (0.32, 5, s_ld, s_an), (-.78, 4.56, s_ld, s_an), (-1.45, 3.67, s_ld, s_an), (-1.74, 2.68, s_ld, sc_an), (-1.7, 1.7, s_ld, sc_an), (-1.4, 1.15, s_ld, sc_an),
-	(-.7, .63, s_ld, sc_an)]
+	(2.22, 5, s_ld, s_an), (1.27, 5.2, s_ld, sc_an), (0.32, 5, s_ld, sc_an), (-.78, 4.56, s_ld, sc_an), (-1.45, 3.67, s_ld, s_an), (-1.74, 2.68, s_ld, 0.99), (-1.7, 1.7, s_ld, 0.99), (-1.4, 1.15, s_ld, 0.99),
+	(-.7, .63, s_ld, 0.99)]
 '''
 
 waypoints = []

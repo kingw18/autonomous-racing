@@ -1,8 +1,8 @@
 <launch>
-    <include file = "$(find move_base)/launch/move_base.launch">
-        <arg name="listen_offboard" value="true" />
-    </include>
-    <node name="control" pkg="race" type="pure_pursuit_control.py" output="screen"/>
-    <include file="$(find particle_filter)/launch/slam.launch"/>
-    <node name="dist_finder" pkg="race" type="dist_find_pure_pursuit.py" output="screen"/>
+	<include file = "$(find move_base)/launch/move_base.launch">
+        	<arg name="listen_offboard" value="true" />
+	</include>
+	<node name="control" pkg="race" type="pure_pursuit_control.py" output="screen"/>
+	<include file="$(find particle_filter)/launch/slam.launch"/>
+	<node name="dist_finder" pkg="race" type="dist_find_pure_pursuit.py" args="$(find race)/src/straight_lines.csv" output="screen"/>
 </launch>

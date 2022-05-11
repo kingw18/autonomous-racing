@@ -69,6 +69,7 @@ def follow_wall(data, side_theta, forward_theta):
 	'''
 	a = getRange(data, forward_theta)
 	b = getRange(data, side_theta)
+	print("Right a:", a, '\t', "Right b:", b)
 	if a > 4 or b > 4:
 		right_error = 0
 	else:
@@ -85,6 +86,7 @@ def follow_wall(data, side_theta, forward_theta):
 	side_theta = 180 - side_theta
 	a = getRange(data, forward_theta)
 	b = getRange(data, side_theta)
+	print("Left a:", a, '\t', "Left b:", b)
 	if a > 4 or b > 4:
 		left_error = 0
 	else:

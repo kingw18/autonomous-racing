@@ -12,9 +12,9 @@ servo_offset = 0.0	# zero correction offset in case servo is misaligned and has 
 prev_error = 0.0
 err_sum = 0
 err_queue = [] 
-err_queue_size = 20
- 
-time_low_error = 0
+err_queue_size = 10
+min_speed = 20
+max_speed = 30 
 # This code can input desired velocity from the user.
 # velocity must be between [0,100] to move forward. 
 # The following velocity values correspond to different speed profiles.
@@ -28,7 +28,6 @@ vel_input = 0.0	#TODO
 # TODO: Use the coorect topic /car_x/offboard/command.
 command_pub = rospy.Publisher('/car_3/offboard/command', AckermannDrive, queue_size = 1)
 
-
 def control(data):
 	global prev_error
 	global vel_input
@@ -40,7 +39,6 @@ def control(data):
 	angle = 0.0
 	global err_queue
 	global err_queue_size
-	global time_low_error
 	print("PID Control Node is Listening to error")
 	
 	## Your PID code goes here
@@ -56,6 +54,7 @@ def control(data):
 	err_queue.insert(0, data.pid_error)
 	# err_sum += data.pid_error
 	error = data.pid_error
+	front_dist = data.pid_vel
 	# print("Error:", error)
 	# 2. Apply the PID equation on error to compute steering
 	# thetad = kp*data.pid_error + kd*(prev_error - err_scaled)
@@ -73,16 +72,29 @@ def control(data):
 	angle = angle if angle > -100 else -100
 	command.steering_angle = angle
 	
-	
-	if abs(error) > 1.21:
-		set_speed = vel_input*1.1/math.sqrt(abs(error))
+	'''	
+	if front_dist < 1:
+		set_speed = 15
 		# print("Scaled speed to:", set_speed)
+	elif front_dist < 4:
+		set_speed = vel_input/((5-front_dist)**.5)*(8+front_dist)/12
 	else:
 		set_speed = vel_input
 	if set_speed < 15:
 		set_speed = 15
 	if set_speed > 60:
 		set_speed = 60
+	'''
+	# min_speed = 25
+	# max_speed = 60
+	if abs(error) > 1.21:
+		set_speed = vel_input*1.1/math.sqrt(abs(error))
+	else:
+		set_speed = vel_input
+	if set_speed < min_speed:
+		set_speed = min_speed
+	if set_speed > max_speed:
+		set_speed = max_speed
 	command.speed = set_speed
 	
 	prev_error=error
@@ -92,16 +104,19 @@ def control(data):
 	# Move the car autonomously
 	command_pub.publish(command)
 
-
 if __name__ == '__main__':
 	# global kp
 	# global kd
 	# global ki
 	# global vel_input
-	kp = input("Enter Kp Value: ")
-	kd = input("Enter Kd Value: ")
-	ki = input("Enter Ki Value: ")
-	vel_input = input("Enter desired velocity: ")
+	# kp = input("Enter Kp Value: ")
+	# kd = input("Enter Kd Value: ")
+	# ki = input("Enter Ki Value: ")
+	# vel_input = input("Enter desired velocity: ")
+	kp = 10
+	kd = .1
+	ki = .001
+	vel_input = max_speed
 	rospy.init_node('pid_controller', anonymous=True)
 	rospy.Subscriber("error", pid_input, control)
 	rospy.spin()

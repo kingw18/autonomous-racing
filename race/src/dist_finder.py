@@ -35,6 +35,19 @@ def getRange(data, angle):
     # Outputs length in meters to object with angle in lidar scan field of view
     # Make sure to take care of NaNs etc.
 	global prev_distance
+	'''
+	# Convert angle to LIDAR's coordinates
+	angle += 30
+	angle = math.radians(angle)
+
+	# Get index
+	angle_ind = int(round(angle / data.angle_increment))
+
+	distance = data.ranges[angle_ind]
+	if data.range_min <= distance <= data.range_max:
+		return distance
+	return 100.0	# TODO: Better implementation of NaNs?
+	'''
 	distance = data.ranges[int((angle+30)*len(data.ranges)/240)]
 	if data.range_min <= distance <= data.range_max:
 		prev_distance=distance	
@@ -57,6 +70,7 @@ def angle_between_indices(lower, higher):
 	return abs(higher - lower)/angle_increment
 
 def ftg_target_angle(data):
+	
 	"""
 	Returns the target goal determine by Follow-The-Gap in degrees
 	"""
@@ -247,9 +261,11 @@ def ftg_target_angle(data):
 			ranges.append(dist)
 	'''
 	
+	# Create Safety Bubble - Naive Implementation
 	"""
-	STEP 3
-	Disparity extender and safety bubble
+	This just creates the bubble around a certain number of measurements on either side of the closest point.
+	I remember Prof. Behl saying in lecture that a more proper implementation would actually compute distances
+	to make the radius of the bubble equal to the width of the car. I tried to implement that below
 	"""
 	'''
 	# print('Closest point dist: ' + str(closest_point) + ' at ' + str(closest_point_ind/angle_increment - 30) + ' degrees.')
@@ -258,8 +274,9 @@ def ftg_target_angle(data):
 	'''
 	'''
 	for i in range(1, len(ranges)):
+
 		if in_disparity:
-			if dist_between_measurements(ranges[disparity_ind], ranges[disparity_ind], (i-disparity_ind)/angle_increment) <= 2.5 * car_width:
+			if dist_between_measurements(ranges[disparity_ind], ranges[disparity_ind], (i-disparity_ind)/angle_increment) <= car_width:
 				if ranges[i] > ranges[disparity_ind]:
 					ranges[i] = ranges[disparity_ind]			
 				else:
@@ -305,7 +322,7 @@ def ftg_target_angle(data):
 				in_disparity = False
 		elif ranges[i] > last_measurement + disparity_threshold and not in_disparity:
 			in_disparity = True
-			disparity_ind = i-1
+			disparity_ind = i - 1
 			ranges[i] = ranges[i - 1]
 		last_measurement = ranges[i]
 	'''
@@ -341,50 +358,18 @@ def ftg_target_angle(data):
 			
 	#	if in_gap:
 	#		current_deepest_in_gap = max(current_deepest_in_gap, ranges[i])
+			
 
-		elif ranges[i] > last_measurement + disparity_threshold and not in_disparity:
-			in_disparity = True
-			disparity_ind = i + 1
-			ranges[i] = ranges[i + 1]
-		last_measurement = ranges[i]
-	
-	left_zero_ind = len(ranges)
-	right_zero_ind = 0
-	ind = closest_point_ind + 1
-	while ind < len(ranges) and dist_between_measurements(closest_point, ranges[ind], angle_increment * (ind - closest_point_ind)) <= 3*car_width:
-		ranges[ind] = 0
-		left_zero_ind = ind
-		ind += 1
-	ind = closest_point_ind - 1
-	# print('First ind going right', ind)
-	while ind >= 1 and dist_between_measurements(closest_point, ranges[ind], angle_increment * (closest_point_ind - ind)) <= 3*car_width:
-		ranges[ind] = 0
-		right_zero_ind = ind
-		ind -= 1
-	#	print("ind in right while:", ind)
-	ranges[closest_point_ind] = 0
-	"""
-	STEP 4
-	Find the widest gap
-	"""
-	if right_zero_ind <= 1:
-		max_gap = (left_zero_ind, len(ranges) - 1)
-	elif left_zero_ind > len(ranges)-3:
-		max_gap = (0, right_zero_ind, ind)
-	elif max(ranges[:right_zero_ind]) > depth_threshold and max(ranges[left_zero_ind:]) < depth_threshold:
-		max_gap = (0, right_zero_ind)
-	elif max(ranges[:right_zero_ind]) < depth_threshold and max(ranges[left_zero_ind:]) > depth_threshold:
-		max_gap = (left_zero_ind, len(ranges) - 1)
-	elif len(ranges) - 1 - left_zero_ind > right_zero_ind:
-		max_gap = (left_zero_ind, len(ranges) - 1)
-	else:
-		max_gap = (0, right_zero_ind)
-	
+	if in_gap and len(ranges) - gap_start > max_gap[1] - max_gap[0]:
+		max_gap = (gap_start, len(ranges))
+		
+	# print(max_gap[0], max_gap[1])
+	# max_gap[1]-=1
+	# Find target angle - Naive Implementation (Find deepest point)
+	max_ind = -1
 	deepest_dist = 0
-	deepest_dist_ind = 0
 	for i in range(max_gap[0], max_gap[1]):
 		if ranges[i] > deepest_dist:
-			deepest_dist_ind = i
 			deepest_dist = ranges[i]
 			max_ind = i
 	
@@ -435,7 +420,6 @@ def ftg_target_angle(data):
 	return -30 + (current_deepest_in_gap_ind/angle_increment)
 	'''
 
-
 def callback(data):
 	global forward_projection
 
@@ -454,7 +438,7 @@ def callback(data):
 	alpha = ftg_target_angle(data) - forward_angle
 	# print(alpha+forward_angle)
 	alpha = math.radians(alpha)
-
+	
 	# AB = b * math.cos(alpha)
 	# AC = vel
 	# CD = AB + AC * math.sin(alpha)

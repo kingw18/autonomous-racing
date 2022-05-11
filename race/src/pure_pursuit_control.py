@@ -13,10 +13,11 @@ prev_error = 0.0
 err_sum = 0
 err_queue = [] 
 err_queue_size = 10
-min_speed = 25
+min_speed = 30
 max_speed = 50
-err_thresh = 1.44
-err_exp = 0.33
+max_speed_curve = 40
+err_thresh = 1.21
+err_exp = 0.5
 # This code can input desired velocity from the user.
 # velocity must be between [0,100] to move forward. 
 # The following velocity values correspond to different speed profiles.
@@ -41,7 +42,7 @@ def control(data):
 	angle = 0.0
 	global err_queue
 	global err_queue_size
-	print("PID Control Node is Listening to error")
+	# print("PID Control Node is Listening to error")
 	
 	## Your PID code goes here
 	#TODO: Use kp, ki & kd to implement a PID controller
@@ -87,7 +88,7 @@ def control(data):
 	if set_speed > 60:
 		set_speed = 60
 	'''
-	# min_speed = 25
+	
 	# max_speed = 80
 	if abs(error) > err_thresh:
 		set_speed = vel_input*((err_thresh / abs(error)) ** err_exp)
@@ -99,6 +100,9 @@ def control(data):
 		set_speed = max_speed
 	command.speed = set_speed
 	
+	if data.pid_vel and set_speed > max_speed_curve:
+		command.speed = max_speed_curve	
+		
 	prev_error=error
 	# print("Error:", data.pid_error)
 	# print("Angle:", angle)
