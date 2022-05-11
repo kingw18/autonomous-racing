@@ -83,6 +83,8 @@ def control(data):
 		set_speed = 15
 	if set_speed > 60:
 		set_speed = 60
+	if error > 9000:
+		set_speed = 0
 	command.speed = set_speed
 	last_speed = set_speed
 	prev_error=error

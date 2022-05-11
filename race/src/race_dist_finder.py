@@ -94,6 +94,9 @@ def follow_wall(data, side_theta, forward_theta):
 		AC = vel
 		CD = AB + AC * math.sin(alpha)
 		left_error = desired_distance - CD
+	print("Left error:", left_error)
+	print("Right error:", right_error)
+	print("Error difference:", right_error - left_error)
 	return right_error - left_error
 
 def checkFront(data):
@@ -103,10 +106,12 @@ def checkFront(data):
 	fov_start_angle = 115
 	fov_end_angle = 180 - fov_start_angle + 60
 	angle_increment = len(data.ranges)/angle_range
-	correction = (fov_start_angle * angle_increment, fov_end_angle * angle_increment)
+	correction = (int(fov_start_angle * angle_increment), int(fov_end_angle * angle_increment))
 	close_seq = 0
+	# print('correction:', correction)
 	for i in range(correction[0], correction[1]):
 		dist = data.ranges[i]
+		# print('dist at index', i, '=', dist)
 		if math.isnan(dist) or not data.range_min + 0.0001 <= dist <= data.range_max:
 			dist = data.range_max
 		if dist < look_ahead:
