@@ -13,6 +13,7 @@ prev_error = 0.0
 err_sum = 0
 err_queue = [] 
 err_queue_size = 20
+last_speed = 0
 
  
 # This code can input desired velocity from the user.
@@ -39,6 +40,7 @@ def control(data):
 	angle = 0.0
 	global err_queue
 	global err_queue_size
+	global last_speed
 	print("PID Control Node is Listening to error")
 	
 	## Your PID code goes here
@@ -74,7 +76,7 @@ def control(data):
 		set_speed = vel_input*1.4/math.sqrt(abs(error))
 		# print("Scaled speed to:", set_speed)
 	elif error == 0:
-		set_speed = 60
+		set_speed = last_speed + 1
 	else:
 		set_speed = vel_input
 	if set_speed < 15:
@@ -82,7 +84,7 @@ def control(data):
 	if set_speed > 60:
 		set_speed = 60
 	command.speed = set_speed
-	
+	last_speed = set_speed
 	prev_error=error
 	# print("Error:", data.pid_error)
 	# print("Angle:", angle)

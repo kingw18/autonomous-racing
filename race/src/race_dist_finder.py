@@ -49,10 +49,14 @@ def callback(data):
 	theta = 60 # you need to try different values for theta
 	side_theta = 0
 	forward_theta = side_theta+theta
-	if checkFront(data):
+	front_check = checkFront(data)
+	if front_check == -1:
 		error = 0
 	else:
-		error = follow_wall(data, side_theta, forward_theta)
+		if front_check < 0.8:
+			error = 10000
+		else:
+			error = follow_wall(data, side_theta, forward_theta)
 	msg = pid_input()	# An empty msg is created of the type pid_input
 	# this is the error that you want to send to the PID for steering correction.
 	msg.pid_error = error	
@@ -95,8 +99,9 @@ def follow_wall(data, side_theta, forward_theta):
 def checkFront(data):
 	global car_width
 	global look_ahead
-	fov_start_angle = math.atan(look_ahead/(car_width*.8))*180/math.pi
-	fov_end_angle = 180 - fov_start_angle
+	fov_start_angle = math.atan(look_ahead/(car_width*.8))*180/math.pi + 30
+	fov_start_angle = 115
+	fov_end_angle = 180 - fov_start_angle + 60
 	angle_increment = len(data.ranges)/angle_range
 	correction = (fov_start_angle * angle_increment, fov_end_angle * angle_increment)
 	close_seq = 0
@@ -108,9 +113,9 @@ def checkFront(data):
 			close_seq += 1
 		else:
 			close_seq = 0
-		if close_seq > 5:
-			return False
-	return True
+		if close_seq > 4:
+			return sum(data.ranges[i-4:i])/4
+	return -1
 
 if __name__ == '__main__':
 	print("Hokuyo LIDAR node started")
